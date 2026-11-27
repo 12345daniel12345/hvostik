@@ -411,8 +411,136 @@ h1:focus, h2:focus { outline: none; }
 .route-base, .route-progress { fill: none; stroke-linecap: round; }
 .route-base { stroke: #f0b7798c; stroke-width: 3; }
 .route-progress { stroke: #ffd190; stroke-width: 6; }
+.route-progress[data-at-start] { visibility: hidden; }
 .map-home circle, .map-destination circle, .route-marker circle { fill: #f8cb81; stroke: #342317; stroke-width: 2; }
 .map-destination .destination-ring { fill: #e9af7050; stroke: none; }
+.route-header { display: grid; gap: 8px; }
+.route-header .route-meta { align-items: start; color: #e8ceaf; }
+.route-meta p > span { display: block; color: #c8b6a3; }
+.route-percent {
+  flex: none;
+  min-width: 48px;
+  background: #eab06b12;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  text-align: center;
+}
+.route-map-frame {
+  min-width: 0;
+  aspect-ratio: 300 / 248;
+  /* аудит 27.11: с overflow: hidden шторка на экране 568 px ужимала карту и Тула пропадала;
+     clip обрезает углы так же, но не разрешает ужимать рамку */
+  overflow: clip;
+  border: 1px solid #a8865b55;
+  border-radius: 17px;
+}
+.route-map-detailed {
+  padding: 0;
+  border-radius: 0;
+  background: #203033;
+}
+.route-map-detailed .russia-shape {
+  fill: #3b342a;
+  stroke: #8c7b60;
+  stroke-width: .75;
+}
+.map-geography :is(.map-rail, .map-road, .map-river, .map-lake) { vector-effect: non-scaling-stroke; }
+.map-lake { fill: #294346; stroke: #526e6c; stroke-width: .55; }
+.map-rail, .map-road, .map-river { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.map-rail { stroke: #bea48658; stroke-width: .55; stroke-dasharray: 1 2.3; }
+.map-road { stroke: #c1ae8e68; stroke-width: .7; }
+.map-road-major { stroke: #c1ae8e8f; stroke-width: .95; }
+.map-river { stroke: #5b8e91; stroke-width: .75; opacity: .78; }
+.map-river-major { stroke: #6aabad; stroke-width: 1.45; opacity: .94; }
+.route-map-detailed text {
+  font-family: inherit;
+  font-size: clamp(7px, calc(18.5px - 2vw), 12.5px);
+  stroke: #30291f;
+  stroke-width: 3px;
+}
+.route-map-detailed .map-river-name {
+  fill: #a2ccca;
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-style: italic;
+  stroke-width: 2.5px;
+}
+.route-map-detailed .route-casing {
+  fill: none;
+  stroke: #231c17aa;
+  stroke-width: 6px;
+  stroke-linecap: round;
+}
+.route-map-detailed .route-base {
+  stroke: #edb47b;
+  stroke-width: 2.6px;
+  stroke-dasharray: 2 5;
+}
+.route-map-detailed .route-progress {
+  stroke: #ffc06a;
+  stroke-width: 4.2px;
+  filter: drop-shadow(0 0 3px #ffad56b8);
+}
+.map-stop-leader { fill: none; stroke: #edd3ad78; stroke-width: .8; }
+.map-stop circle { fill: #47382b; stroke: #f2cc9f; stroke-width: 1.25; }
+.map-stop-endpoint circle { stroke-width: 1.8; }
+.map-stop[data-passed] > circle { fill: #ffd491; stroke: #4d3221; }
+.map-stop .map-home-mark circle { fill: #422e20; stroke: #e7ba80; stroke-width: 1; }
+.map-house { fill: none; stroke: #ffe2b5; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+.map-stop:is(.map-stop-endpoint, .map-stop-capital) text { font-weight: 750; }
+.map-pet .map-pet-disc { fill: #ffce85; stroke: #382416; stroke-width: 1.5; }
+.map-pet .map-pet-halo {
+  fill: none;
+  stroke: #ffbf6b;
+  stroke-width: 1;
+  opacity: .42;
+  animation: route-pulse 2.5s ease-out infinite;
+}
+.map-paw { fill: #442c1c; }
+@keyframes route-pulse {
+  from { transform: scale(.78); opacity: .7; }
+  to { transform: scale(1.27); opacity: 0; }
+}
+.route-details { display: grid; gap: 10px; }
+.route-stops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 11px;
+  margin: 0;
+  padding: 9px 11px;
+  list-style: none;
+  border: 1px solid #c99a6b38;
+  border-radius: 12px;
+  background: #17100b4f;
+}
+.route-stops li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #d7c8b6;
+  font-size: 12px;
+}
+.route-stops li[data-passed] { color: #ffdaaa; }
+.stop-status {
+  display: grid;
+  flex: 0 0 11px;
+  width: 11px;
+  height: 11px;
+  place-items: center;
+  border: 1px solid #bca58d;
+  border-radius: 50%;
+}
+.route-stops [data-passed] .stop-status { border-color: #ffc67e; background: #ffc67e; }
+.route-stops [data-passed] .stop-status::after {
+  width: 5px;
+  height: 3px;
+  border: solid #412a19;
+  border-width: 0 0 1px 1px;
+  content: "";
+  transform: translateY(-.5px) rotate(-45deg);
+}
+.route-stops li:not([data-passed]) .stop-visited { display: none; }
+.route-credit { color: #c4b19b; font-size: 11px; }
 .muted { color: var(--muted); font-size: 11px; }
 .stamps { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
 .stamps > span { padding: 6px 9px; border: 1px dashed var(--edge); border-radius: 9px; color: var(--muted); font-size: 12px; }
@@ -427,4 +555,32 @@ h1:focus, h2:focus { outline: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* Детский режим (аудит 27.11): заметно светлее и крупнее, фраз меньше и они проще. */
+[data-child="true"] [data-light]:not([data-scene="night"]) { --scene-light: saturate(1.18) brightness(1.08); }
+[data-child="true"] .subtitle { font-size: 20px; line-height: 1.3; border-radius: 26px; border-color: #ffd79a66; }
+[data-child="true"] .task-pill { font-size: 18px; }
+.route-map :is(.russia-shape, .route-base, .route-progress) { vector-effect: non-scaling-stroke; }
+
+/* Лапка-вызов (27.11.2026): напротив дневника, мягко светится; нажатие — питомец откликается голосом. */
+.paw-call {
+  position: absolute;
+  bottom: calc(var(--bottom) + 23px);
+  left: var(--side);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  color: #ffd79a;
+  animation: paw-glow 3.2s ease-in-out infinite;
+}
+.paw-call svg { width: 22px; height: 22px; fill: currentColor; }
+.paw-call:active { transform: scale(.94); }
+[data-scene="night"] .paw-call { opacity: .78; }
+@keyframes paw-glow {
+  0%, 100% { box-shadow: 0 0 0 0 #f3b25a00; }
+  50% { box-shadow: 0 0 18px 2px #f3b25a66; }
 }

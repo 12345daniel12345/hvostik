@@ -8,6 +8,8 @@
   const openCities = cities.filter((city) => city.проверено !== false);
   const videos = window.HV_VIDEOS || {};
   const mapData = window.HVMap;
+  const voice = window.HVVoice ?? { supported: false, enabled: false, say() {}, stop() {}, duration: () => 0, setEnabled() {} };
+  let vibratedFor = null;
   const params = new URLSearchParams(location.search);
   const guestMode = params.has('guest');
   const guest = guestMode ? H.decodeGuest(params.get('guest'), cities) : null;
@@ -85,6 +87,7 @@
         pet = H.normalizePet(candidate);
       }
       child = localStorage.getItem(childKey) === '1';
+      document.documentElement.dataset.child = String(child);
     } catch {
       notice.hidden = false;
     }
@@ -152,6 +155,35 @@
     <span id="subtitle-text" aria-hidden="true"></span><span class="sr-only" id="subtitle-live" aria-live="polite"></span>
   </div>`;
 
+  // Лапка-вызов (27.11.2026): нажал — питомец откликается и говорит, где он сейчас.
+  function pawCall() {
+    return `<button class="paw-call glass" type="button" data-action="summon" aria-label="Позвать питомца">
+      <svg aria-hidden="true" viewBox="0 0 24 24"><ellipse cx="12" cy="16" rx="5" ry="4.2"/><circle cx="5.6" cy="10.6" r="2.2"/>
+      <circle cx="9.4" cy="6.6" r="2.2"/><circle cx="14.6" cy="6.6" r="2.2"/><circle cx="18.4" cy="10.6" r="2.2"/></svg></button>`;
+  }
+
+  function whereAmI() {
+    const trip = pet.trip;
+    const city = cityById(trip.cityId);
+    const fromName = `из ${genitive(cityById(trip.fromCityId)?.name ?? 'Москва')}`;
+    if (renderedScene.mode === 'night') return `Сплю в дороге. Завтра — следующая остановка: ${city.name}.`;
+    const share = Math.max(0, Math.min(1, (Date.now() - trip.startedAt) / (trip.returnAt - trip.startedAt)));
+    return `Я тут! Еду ${fromName} в ${accusative(city.name)}, проехали ${Math.round(share * 100)}%. Позвоню около ${timeFormat.format(trip.returnAt)}.`;
+  }
+
+  const genitiveNames = { 'Тула': 'Тулы', 'Ярославль': 'Ярославля', 'Москва': 'Москвы' };
+  const genitive = (name) => genitiveNames[name] ?? name;
+  const accusativeNames = { 'Тула': 'Тулу', 'Москва': 'Москву' };
+  const accusative = (name) => accusativeNames[name] ?? name;
+
+  function summonPet() {
+    if (!pet?.trip) return;
+    petAnimation.react(art);
+    clearTimeout(speechTimer);
+    speak(whereAmI());
+    scheduleSpeech();
+  }
+
   function diaryHandle() {
     return `<button class="diary-handle" type="button" data-action="diary" data-gesture="diary"
       aria-label="Открыть дневник" aria-haspopup="dialog"><span aria-hidden="true"></span>Дневник</button>`;
@@ -200,7 +232,7 @@
     }
     if (mode === 'trip' || mode === 'night') {
       return `${heading(name, mode === 'trip' ? 'В дороге' : 'В дороге · ночь')}
-        <div class="scene-bottom">${subtitle()}${routeThread(city)}</div>${diaryHandle()}`;
+        <div class="scene-bottom">${subtitle()}${routeThread(city)}</div>${pawCall()}${diaryHandle()}`;
     }
     const context = mode === 'story' || mode === 'joy' ? 'На остановке' : city?.name ?? 'Дома';
     const place = mode === 'story' || mode === 'joy' ? city.name : name;
@@ -261,6 +293,7 @@
     box.hidden = false;
     const visible = box.querySelector('#subtitle-text');
     box.querySelector('#subtitle-live').textContent = text;
+    if (!sheet.open && !menuOpen) voice.say(text, guestMode ? guest?.species : pet?.species, { child });
     if (!animate || reducedMotion.matches) {
       visible.textContent = text;
       return;
@@ -277,7 +310,8 @@
   function scheduleSpeech() {
     clearTimeout(speechTimer);
     if (lineIndex < lines.length && !sheet.open && !menuOpen && !document.hidden) {
-      speechTimer = setTimeout(advanceSpeech, 5000);
+      const current = lines[lineIndex];
+      speechTimer = setTimeout(advanceSpeech, Math.max(5000, voice.duration(typeof current === 'string' ? current : current?.text)));
     }
   }
 
@@ -352,6 +386,7 @@
     if (!menuOpen) return;
     menu.innerHTML = `${button('Выбор питомца', 'edit-pet')}
       <label><input type="checkbox" id="child-mode" ${child ? 'checked' : ''}>Детский режим</label>
+      ${voice.supported ? `<label><input type="checkbox" id="voice-mode" ${voice.enabled ? 'checked' : ''}>Голос питомца</label>` : ''}
       ${button('В гости', 'guest-share')}
       ${checkMode && pet?.trip ? button('Для проверки: ускорить прибытие', 'accelerate') : ''}
       ${button('Сбросить питомца', 'reset', '', 'reset')}`;
@@ -371,6 +406,10 @@
     }
     renderedScene = state;
     controls.innerHTML = sceneView(state);
+    if (state.mode === 'call' && vibratedFor !== arrivalCard()?.id) {
+      vibratedFor = arrivalCard()?.id;
+      navigator.vibrate?.([260, 140, 260, 140, 260]);
+    }
     setupSpeech(state);
     menuButton.hidden = guestMode || !pet || choosing;
     renderMenu();
@@ -427,16 +466,12 @@
     render();
   }
 
-  function routeDistance(from, to) {
-    const radians = (value) => value * Math.PI / 180;
-    const lat1 = radians(from.lat), lat2 = radians(to.lat);
-    const dLat = lat2 - lat1, dLon = radians(to.lon - from.lon);
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-    return Math.round(6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  }
-
   function routeMap(city) {
-    const origin = cityById(pet.trip.fromCityId);
+    const fromId = pet.trip.fromCityId ?? 'moscow';
+    const detailed = window.HVRouteMap.render(fromId, city.id);
+    if (detailed) return detailed;
+
+    const origin = cityById(fromId);
     const originName = origin?.name ?? 'Москва';
     const home = origin?.coordinates ?? mapData.home;
     const start = mapData.project(home.lon, home.lat);
@@ -452,28 +487,39 @@
       if (separation < 210) return { x: toLeft ? -29 : 29, y: 6, side: toLeft ? 'end' : 'start' };
       return { x: 0, y: point.y < 65 ? 30 : -26, side: 'middle' };
     };
+    // Аудит 27.11: карта приближается к самому маршруту, а не показывает всю Россию.
+    const [, , fullW, fullH] = mapData.viewBox.split(' ').map(Number);
+    const minX = Math.min(start.x, end.x), maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y, controlY), maxY = Math.max(start.y, end.y);
+    const pad = Math.max(55, separation * 0.45);
+    let boxW = Math.max(240, maxX - minX + pad * 2), boxH = Math.max(maxY - minY + pad * 2, boxW * fullH / fullW);
+    boxW = Math.max(boxW, boxH * fullW / fullH);
+    const boxX = Math.max(0, Math.min(fullW - boxW, (minX + maxX) / 2 - boxW / 2));
+    const boxY = Math.max(0, Math.min(fullH - boxH, (minY + maxY) / 2 - boxH / 2));
+    const k = Math.min(1, boxW / fullW) * 1.5;
+    const viewBox = `${boxX.toFixed(1)} ${boxY.toFixed(1)} ${boxW.toFixed(1)} ${boxH.toFixed(1)}`;
     const label = (point, name, toLeft) => {
       const { x, y, side } = anchors(point, toLeft);
       return `<text x="${x}" y="${y}" text-anchor="${side}">${name}</text>`;
     };
     return `${title(`${originName} → ${city.name}`)}
-      <div class="route-meta"><span>≈ ${routeDistance(home, city.coordinates)} км по прямой</span>
-      <span class="route-percent" data-route-percent>0%</span></div>
-      <svg class="route-map" viewBox="${mapData.viewBox}" role="img" aria-label="${originName} → ${city.name}, по прямой">
+      <div class="route-meta"><span>≈ ${Math.round(window.HVRouteMap.distance(home, city.coordinates))} км по прямой</span>
+      <span class="route-percent" data-route-percent role="progressbar" aria-label="Пройдено" aria-valuenow="0">0%</span></div>
+      <svg class="route-map" viewBox="${viewBox}" role="img" aria-label="${originName} → ${city.name}, по прямой">
         <path class="russia-shape" fill-rule="evenodd" d="${mapData.shape}"></path>
         ${openCities.filter((item) => item.id !== city.id && item.id !== origin?.id).map((item) => {
           const point = mapData.project(item.coordinates.lon, item.coordinates.lat);
-          return `<circle class="map-other-city" cx="${point.x}" cy="${point.y}" r="4"><title>${item.name}</title></circle>`;
+          return `<circle class="map-other-city" cx="${point.x}" cy="${point.y}" r="${(4 * k).toFixed(2)}"><title>${item.name}</title></circle>`;
         }).join('')}
         <path class="route-base" d="${route}"></path>
         <path class="route-progress" d="${route}"></path>
-        <g class="map-home" transform="translate(${start.x} ${start.y})"><circle r="9"></circle>
+        <g class="map-home" transform="translate(${start.x} ${start.y}) scale(${k})"><circle r="9"></circle>
           ${label(start, originName, start.x <= end.x)}</g>
-        <g class="map-destination" transform="translate(${end.x} ${end.y})"><circle class="destination-ring" r="19"></circle>
+        <g class="map-destination" transform="translate(${end.x} ${end.y}) scale(${k})"><circle class="destination-ring" r="19"></circle>
           <circle r="8"></circle>${label(end, city.name, start.x > end.x)}</g>
-        <g class="route-marker" transform="translate(${start.x} ${start.y})"><circle r="12"></circle></g>
+        <g class="route-marker" transform="translate(${start.x} ${start.y})"><g transform="scale(${k})"><circle r="12"></circle></g></g>
       </svg>
-      <p class="muted">Карта: Natural Earth · точки: © участники OpenStreetMap.</p>`;
+      <p class="muted">Карта: Natural Earth · города: © участники OpenStreetMap</p>`;
   }
 
   function updateRoute() {
@@ -489,8 +535,15 @@
       const point = path.getPointAtLength(length * progress);
       path.style.strokeDasharray = String(length);
       path.style.strokeDashoffset = String(length * (1 - progress));
+      path.toggleAttribute('data-at-start', progress === 0);
       content.querySelector('.route-marker').setAttribute('transform', `translate(${point.x} ${point.y})`);
-      content.querySelector('[data-route-percent]').textContent = `${Math.floor(progress * 100)}%`;
+      const percent = content.querySelector('[data-route-percent]');
+      const rounded = Math.floor(progress * 100);
+      percent.textContent = `${rounded}%`;
+      percent.setAttribute('aria-valuenow', rounded);
+      for (const stop of content.querySelectorAll('[data-route-stop]')) {
+        stop.toggleAttribute('data-passed', progress >= Number(stop.dataset.routeStop));
+      }
     }
     if (progress < 1 && !document.hidden) {
       routeTimer = setTimeout(updateRoute, trip.kind === 'intro' && !reducedMotion.matches ? 80 : 1000);
@@ -534,10 +587,10 @@
     const city = cityById(card.cityId);
     return `${title(city.name)}${visitor ? '' : button('‹ Дневник', 'diary', '', 'text-button')}
       ${postcardMedia(city, visitor ? guest.species : pet.species)}
-      <p class="postcard-letter">«${window.HV_PHRASES[city.id]}»</p>
       <div class="postcard-facts"><ul>${(child ? city.known.slice(0, 1) : city.known).map((fact) => `<li>${fact}</li>`).join('')}</ul>
         <p>${city.fact}</p>${city.food ? `<p><strong>Что попробовать</strong> ${city.food}</p>` : ''}
         <p><strong>Когда поехать</strong> ${city.when}</p>${unverified(city)}</div>
+      <p class="postcard-letter">«${window.HV_PHRASES[city.id]}»</p>
       ${visitor ? '<a class="button primary" href="index.html">Завести питомца</a>' :
         `${button(card.answered ? 'Открыть ответ' : 'Ответить на вопрос', 'quiz', '', 'primary')}
           <div class="sheet-row">
@@ -606,6 +659,7 @@
   }
 
   function openSheet(view) {
+    voice.stop();
     if (!sheet.open) sheetReturnFocus = document.activeElement;
     renderSheet(view);
     if (!sheet.open) sheet.showModal();
@@ -670,6 +724,7 @@
       render(true);
     },
     'next-line': advanceSpeech,
+    summon: summonPet,
     'complete-care': completeCare,
     'care-options': () => openSheet('care'),
     'pick-care': (target) => {
@@ -758,8 +813,13 @@
   });
 
   document.addEventListener('change', (event) => {
+    if (event.target.id === 'voice-mode') {
+      voice.setEnabled(event.target.checked);
+      return;
+    }
     if (event.target.id !== 'child-mode') return;
     child = event.target.checked;
+    document.documentElement.dataset.child = String(child);
     store(childKey, child ? '1' : '0');
     render();
     menu.querySelector('#child-mode')?.focus();
