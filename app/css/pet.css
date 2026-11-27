@@ -73,6 +73,14 @@
   mask-image: linear-gradient(#000 72%, transparent 100%);
 }
 
+/* Кадры собаки из Kling без нарисованного интерфейса: та же сцена на 72 % высоты. */
+:is([data-frame="dog-train"], [data-frame="dog-night"]) .pet-frame {
+  bottom: 28%;
+  mask-image: linear-gradient(#000 72%, transparent 100%);
+}
+[data-frame="dog-train"] { --photo-x: 45%; }
+[data-frame="dog-night"] { --photo-x: 40%; }
+
 :is([data-frame="cat-train"], [data-frame="cat-call-tula"], [data-frame="cat-story-tula"],
     [data-frame="cat-night"]) img {
   top: calc(-100% * var(--photo-start, 0) / var(--photo-window));

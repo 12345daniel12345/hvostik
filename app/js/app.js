@@ -134,7 +134,7 @@
     if (pet.trip) {
       const city = cityById(pet.trip.cityId);
       const night = pet.trip.kind === 'care' && renderedLight === 'night';
-      const file = pet.species === 'cat' ? (night ? 'live/cat-night' : 'live/cat-train') : 'dog-road';
+      const file = `live/${pet.species === 'dog' ? 'dog' : 'cat'}-${night ? 'night' : 'train'}`;
       return { mode: night ? 'night' : 'trip', city, file };
     }
     const card = arrivalCard();
