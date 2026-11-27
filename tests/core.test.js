@@ -140,8 +140,8 @@ test('ответ на угадайку принимается один раз', 
 
 test('паспорт считает города, маршруты и верные ответы', () => {
   const p = H.newPet({ name: 'Пряник' });
-  p.visited = ['tula', 'suzdal'];
-  p.postcards = [{ id: 'a', cityId: 'tula', answered: true, correct: true }];
+  p.visited = ['yaroslavl', 'suzdal'];
+  p.postcards = [{ id: 'a', cityId: 'yaroslavl', answered: true, correct: true }];
   const ps = H.passport(p, cities);
   assert.equal(ps.visitedCount, 2); assert.equal(ps.knowledgeCount, 1);
   assert.equal(ps.routes.find((r) => r.name === 'Золотое кольцо').done, 2);
@@ -196,7 +196,8 @@ test('у каждого города есть все поля и три факт
   for (const c of cities) {
     assert.ok(c.name && c.id, 'нет имени/id у ' + c.id);
     assert.equal(c.known.length, 3, 'нужно 3 пункта «Чем знаменит»: ' + c.id);
-    assert.ok(c.food && c.fact && c.when && c.tagline, 'пустое поле: ' + c.id);
+    assert.ok(c.fact && c.when && c.tagline, 'пустое поле: ' + c.id);
+    assert.ok(c.food || c.проверено, 'нет еды у непроверенного города: ' + c.id);
     assert.ok(c.source, 'нет источника: ' + c.id);
     assert.ok(Number.isFinite(c.coordinates?.lat) && Number.isFinite(c.coordinates?.lon), 'нет координат: ' + c.id);
     assert.ok(c.coordinates_source, 'нет источника координат: ' + c.id);
@@ -215,8 +216,12 @@ test('id городов уникальны', () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test('пометка «проверено» стоит честно: пока все false', () => {
-  assert.ok(cities.every((c) => c.проверено === false));
+test('пометка «проверено» стоит честно: у проверенных есть источники и нет несверенного', () => {
+  for (const c of cities.filter((city) => city.проверено)) {
+    assert.ok(c.источники?.length >= 2, 'мало источников: ' + c.id);
+    assert.equal(c.не_сверено?.length ?? 0, 0, 'есть несверенное: ' + c.id);
+  }
+  assert.ok(!cities.find((c) => c.id === 'tula').routes.includes('Золотое кольцо'), 'Тула не входит в Золотое кольцо');
 });
 
 console.log('\nЖесты');

@@ -1,5 +1,5 @@
 {
-  "_статус": "Первая партия: 12 из 100. Каждый факт должен быть сверен с источником из поля source до публикации. Поле проверено = false, пока не сверено.",
+  "_статус": "На сайте показываются только города с проверено = true (27.11.2026: Тула, Ярославль). Остальные скрыты до сверки по источникам; их данные нужны только для старых сохранений.",
   "_карта": {
     "контур": "Natural Earth 10m Admin 0 Countries, public domain: https://www.naturalearthdata.com/downloads/10m-cultural-vectors/10m-admin-0-countries/",
     "geojson": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson",
@@ -14,17 +14,17 @@
       "name": "Тула",
       "cost": 3,
       "routes": [
-        "Золотое кольцо"
+        "Москва — Тула"
       ],
       "tagline": "К пряникам и самоварам",
       "known": [
-        "Тульские пряники",
+        "Тульские печатные пряники",
         "Самовары",
         "Оружейный завод — основан при Петре I в 1712 году"
       ],
-      "food": "Тульский пряник с начинкой",
-      "fact": "Выражение «ездить в Тулу со своим самоваром» — про то, что не надо везти туда, где этого и так много",
-      "when": "Круглый год; из Москвы около двух часов на поезде",
+      "food": "Тульский печатный пряник с повидлом",
+      "fact": "Тульский пряник печатают в резной деревянной форме — так на тесте появляются рисунок и надпись",
+      "when": "Круглый год; из Москвы — от двух часов на скоростном поезде",
       "quiz": {
         "question": "Угадай, что я нашёл в Туле?",
         "options": [
@@ -35,22 +35,21 @@
         "correct": 2
       },
       "source": "ru.wikipedia.org/wiki/Тула",
-      "проверено": false,
+      "проверено": true,
       "источники": [
-        "https://www.putevka.com/tulskaya-oblast/tula/sight/imperatorskiy-tulskiy-oruzheynyy-zavod",
-        "https://en.wikipedia.org/wiki/Tula_Arms_Plant"
+        "https://en.wikipedia.org/wiki/Tula_Arms_Plant",
+        "https://ru.wikisource.org/wiki/Полное_собрание_законов_Российской_империи/ДО/Собрание_первое/2486",
+        "https://cyclowiki.org/wiki/Тульский_пряник",
+        "https://www.onetwotrip.com/ru/blog/smart-travel/did-you-know/samovar-i-pryanik-top-5-pryanichnyh-stolicz-rossii-dlya-turistov/",
+        "https://tonkosti.ru/Как_добраться_до_Тулы"
       ],
-      "не_сверено": [
-        "Тульские пряники и самовары как известные факты — поиском не проверены",
-        "Тульский пряник с начинкой — еда",
-        "Выражение про самовар — из общеизвестного, источника нет",
-        "Время в пути из Москвы — около двух часов, сверить с расписанием"
-      ],
+      "не_сверено": [],
       "coordinates": {
         "lat": 54.1930321,
         "lon": 37.61754
       },
-      "coordinates_source": "https://www.openstreetmap.org/relation/2538203"
+      "coordinates_source": "https://www.openstreetmap.org/relation/2538203",
+      "сверено": "27.11.2026: завод 1712 (указ Петра I), печатный пряник с повидлом, Тула — город самоваров, поезд от 2 ч. Пословица про самовар не подтверждена — убрана."
     },
     {
       "id": "kazan",
@@ -350,7 +349,7 @@
         "Традиционная дата основания — 1010 год, учёные уточняют (возможно, 1014)",
         "Город стоит на слиянии Волги и Которосли"
       ],
-      "food": "Волжская рыба",
+      "food": "",
       "fact": "На гербе Ярославля — медведь; по преданию, его одолел князь Ярослав Мудрый",
       "when": "Май–сентябрь — прогулки по Волге",
       "quiz": {
@@ -363,19 +362,20 @@
         "correct": 0
       },
       "source": "ru.wikipedia.org/wiki/Ярославль",
-      "проверено": false,
+      "проверено": true,
       "источники": [
         "https://rg.ru/2010/09/08/gorod.html",
-        "https://bigenc.ru/c/iaroslavl-8edf58"
+        "https://bigenc.ru/c/iaroslavl-8edf58",
+        "https://www.vokrugsveta.ru/history/1000-let-nazad-osnovan-yaroslavl-id600745/",
+        "https://www.tutu.ru/geo/rossiya/kurort/golden_ring/"
       ],
-      "не_сверено": [
-        "Волжская рыба как еда — общее место"
-      ],
+      "не_сверено": [],
       "coordinates": {
         "lat": 57.6263877,
         "lon": 39.8933705
       },
-      "coordinates_source": "https://www.openstreetmap.org/relation/1701435"
+      "coordinates_source": "https://www.openstreetmap.org/relation/1701435",
+      "сверено": "27.11.2026: медведь на гербе и предание о Ярославе, 1010 (возможно до 1014), слияние Волги и Которосли, Золотое кольцо. Еда «волжская рыба» не подтверждена — убрана."
     },
     {
       "id": "kaliningrad",

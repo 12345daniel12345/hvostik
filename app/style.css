@@ -322,7 +322,7 @@ h1:focus, h2:focus { outline: none; }
   box-shadow: 0 10px 36px #0006;
 }
 
-.menu { display: grid; width: min(260px, calc(100% - 2 * var(--side))); }
+.menu { display: grid; width: min(220px, calc(100% - 2 * var(--side))); }
 .menu .button, .menu label { display: flex; align-items: center; gap: 10px; min-height: 44px; justify-content: flex-start; padding: 7px 12px; border: 0; background: none; text-align: left; font-size: 14px; }
 .menu label { cursor: pointer; }
 .menu input, progress { accent-color: var(--amber); }
@@ -400,7 +400,8 @@ h1:focus, h2:focus { outline: none; }
 .quiz-question { font-size: 18px; }
 .route-list { display: grid; gap: 10px; }
 .route-label { display: flex; gap: 8px; justify-content: space-between; align-items: baseline; font-size: 13px; }
-.route-label progress { display: block; width: min(180px, 46vw); }
+.route-label label { flex: 1; }
+.route-label progress { display: block; width: 100%; margin-top: 4px; }
 .route-meta { display: flex; justify-content: space-between; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); }
 .route-percent { padding: 4px 9px; border: 1px solid #ffca7d78; border-radius: 20px; color: #ffd49b; }
 .route-map { display: block; width: 100%; min-width: 0; height: auto; padding: 7px; border-radius: 17px; background: #1b2427; }

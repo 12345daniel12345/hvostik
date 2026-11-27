@@ -64,6 +64,15 @@
 
 [data-frame="cat-night"] .pet-frame { bottom: 12%; }
 
+/* Аудит 27.11: на телефоне кадр растягивался по высоте и кот выходил одной мордой.
+   Теперь кадр Kling занимает всю ширину в своих пропорциях (окно, самовар, лапа видны),
+   а ниже сцена уходит в тёмный фон под субтитрами и кнопкой. */
+:is([data-frame="cat-train"], [data-frame="cat-call-tula"], [data-frame="cat-story-tula"],
+    [data-frame="cat-night"]) .pet-frame {
+  bottom: 28%;
+  mask-image: linear-gradient(#000 72%, transparent 100%);
+}
+
 :is([data-frame="cat-train"], [data-frame="cat-call-tula"], [data-frame="cat-story-tula"],
     [data-frame="cat-night"]) img {
   top: calc(-100% * var(--photo-start, 0) / var(--photo-window));

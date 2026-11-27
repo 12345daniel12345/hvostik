@@ -4,6 +4,8 @@
   const H = window.Hvostik;
   const petAnimation = window.HVPet;
   const cities = window.HV_CITIES;
+  // Людям показываем только сверенные города; полный список нужен для старых сохранений.
+  const openCities = cities.filter((city) => city.проверено !== false);
   const videos = window.HV_VIDEOS || {};
   const mapData = window.HVMap;
   const params = new URLSearchParams(location.search);
@@ -102,15 +104,18 @@
     `<button type="button" class="button ${kind}" data-action="${action}" ${attrs}>${label}</button>`;
   const title = (text) => `<h2 id="sheet-title" tabindex="-1">${text}</h2>`;
   const figure = (file, alt) => `<figure class="sheet-photo">
-    <img src="img/${file}.webp?v=3" alt="${escapeHtml(alt)}"><figcaption>Иллюстрация</figcaption>
+    <img src="img/${file}.webp?v=4" alt="${escapeHtml(alt)}"><figcaption>Иллюстрация</figcaption>
   </figure>`;
 
   function nextCity(from = pet.postcards[0]?.cityId) {
-    return cityById(pet.nextStopId) ?? cities[(cities.findIndex((city) => city.id === from) + 1) % cities.length];
+    const chosen = openCities.find((city) => city.id === pet.nextStopId);
+    return chosen ?? openCities[(openCities.findIndex((city) => city.id === from) + 1) % openCities.length];
   }
 
   function restingPhoto(animal, city) {
-    return city ? petPostcards[animal]?.[city.id] ?? `${animal}-away` : `${animal}-home`;
+    // У кота пока нет своего кадра для каждой остановки: вместо старого рыжего кота — британец из дороги.
+    const away = animal === 'cat' ? 'live/cat-train' : `${animal}-away`;
+    return city ? petPostcards[animal]?.[city.id] ?? away : `${animal}-home`;
   }
 
   function stopScene(mode, city) {
@@ -456,7 +461,7 @@
       <span class="route-percent" data-route-percent>0%</span></div>
       <svg class="route-map" viewBox="${mapData.viewBox}" role="img" aria-label="${originName} → ${city.name}, по прямой">
         <path class="russia-shape" fill-rule="evenodd" d="${mapData.shape}"></path>
-        ${cities.filter((item) => item.id !== city.id && item.id !== origin?.id).map((item) => {
+        ${openCities.filter((item) => item.id !== city.id && item.id !== origin?.id).map((item) => {
           const point = mapData.project(item.coordinates.lon, item.coordinates.lat);
           return `<circle class="map-other-city" cx="${point.x}" cy="${point.y}" r="4"><title>${item.name}</title></circle>`;
         }).join('')}
@@ -497,21 +502,21 @@
       ${pet.postcards.length ? `<div class="photo-stack">${pet.postcards.map((card) => {
         const city = cityById(card.cityId);
         return `<button class="print" type="button" data-action="postcard" data-value="${escapeHtml(card.id)}">
-          <img src="img/${photoFor(city, pet.species)}.webp?v=3" alt="" loading="lazy">
+          <img src="img/${photoFor(city, pet.species)}.webp?v=4" alt="" loading="lazy">
           <span>${city.name}</span><small>Иллюстрация</small></button>`;
       }).join('')}</div>` : '<p>Первая открытка появится после поездки.</p>'}
       <div class="sheet-row">${button('Паспорт', 'passport')}${button('Маршруты', 'destinations')}</div>`;
   }
 
   function destinationsView() {
-    const passport = H.passport(pet, cities);
+    const passport = H.passport(pet, openCities);
     return `${title('Маршруты')}${button('‹ Дневник', 'diary', '', 'text-button')}
       ${pet.trip ? button('Карта поездки', 'route') : ''}
       <div class="route-list">${passport.routes.map((route) => `<div class="route-label">
         <label>${route.name}<progress value="${route.done}" max="${route.total}"></progress></label>
         <small>${route.done} / ${route.total}</small></div>`).join('')}</div>
       ${pet.trip ? '' : `<form id="destination-form"><label for="destination">Следующая остановка</label>
-        <select id="destination" name="city">${cities.filter((city) => city.id !== pet.postcards[0]?.cityId)
+        <select id="destination" name="city">${openCities.filter((city) => city.id !== pet.postcards[0]?.cityId)
           .map((city) => `<option value="${city.id}" ${nextCity().id === city.id ? 'selected' : ''}>${city.name}</option>`).join('')}
         </select><button class="button primary" type="submit">Выбрать остановку</button></form>`}`;
   }
@@ -520,7 +525,7 @@
     const file = photoFor(city, animal);
     const video = videos[animal]?.[city.id];
     return video ? `<figure class="sheet-photo">
-      <video controls playsinline muted preload="metadata" poster="img/${file}.webp?v=3" aria-label="ИИ-видео: ${city.name}">
+      <video controls playsinline muted preload="metadata" poster="img/${file}.webp?v=4" aria-label="ИИ-видео: ${city.name}">
         <source src="video/${video}.mp4" type="video/mp4"></video><figcaption>ИИ-видео</figcaption>
       </figure>` : figure(file, city.name);
   }
@@ -531,7 +536,7 @@
       ${postcardMedia(city, visitor ? guest.species : pet.species)}
       <p class="postcard-letter">«${window.HV_PHRASES[city.id]}»</p>
       <div class="postcard-facts"><ul>${(child ? city.known.slice(0, 1) : city.known).map((fact) => `<li>${fact}</li>`).join('')}</ul>
-        <p>${city.fact}</p><p><strong>Что попробовать</strong> ${city.food}</p>
+        <p>${city.fact}</p>${city.food ? `<p><strong>Что попробовать</strong> ${city.food}</p>` : ''}
         <p><strong>Когда поехать</strong> ${city.when}</p>${unverified(city)}</div>
       ${visitor ? '<a class="button primary" href="index.html">Завести питомца</a>' :
         `${button(card.answered ? 'Открыть ответ' : 'Ответить на вопрос', 'quiz', '', 'primary')}
@@ -553,10 +558,10 @@
   }
 
   function passportView() {
-    const passport = H.passport(pet, cities);
+    const passport = H.passport(pet, openCities);
     return `${title('Паспорт')}${button('‹ Дневник', 'diary', '', 'text-button')}
-      <p>Городов: ${passport.visitedCount} из ${passport.total} · Знаний: ${passport.knowledgeCount}</p>
-      <div class="stamps">${cities.map((city) => {
+      <p>Городов: ${openCities.filter((city) => pet.visited.includes(city.id)).length} из ${passport.total} · Знаний: ${passport.knowledgeCount}</p>
+      <div class="stamps">${openCities.map((city) => {
         const card = pet.postcards.find((item) => item.cityId === city.id);
         return card ? button(city.name, 'postcard', `data-value="${escapeHtml(card.id)}"`)
           : `<span aria-label="${city.name}, закрыто">${city.name}</span>`;
