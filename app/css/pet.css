@@ -46,7 +46,7 @@
 [data-fur="smoke"] { --fur-tone: saturate(.36); }
 [data-fur="dark"] { --fur-tone: brightness(.79); }
 
-[data-frame="cat-home"] { --photo-x: 51%; }
+[data-frame="cat-home"] { --photo-x: 50%; }
 [data-frame="dog-home"], [data-frame="dog-road"] { --photo-x: 47%; }
 [data-frame="dog-away"] { --photo-x: 52%; }
 

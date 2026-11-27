@@ -42,7 +42,7 @@
     layer.dataset.frame = file.split('/').at(-1);
     layer.setAttribute('aria-hidden', 'true');
     layer.innerHTML = '<div class="pet-frame"><div class="pet-camera"><div class="pet-breath"><img alt="" draggable="false"></div></div></div>';
-    layer.querySelector('img').src = `img/${file}.webp`;
+    layer.querySelector('img').src = `img/${file}.webp?v=3`;
     const light = document.createElement('div');
     light.className = 'pet-light';
     layer.append(light);

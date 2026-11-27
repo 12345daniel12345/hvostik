@@ -102,7 +102,7 @@
     `<button type="button" class="button ${kind}" data-action="${action}" ${attrs}>${label}</button>`;
   const title = (text) => `<h2 id="sheet-title" tabindex="-1">${text}</h2>`;
   const figure = (file, alt) => `<figure class="sheet-photo">
-    <img src="img/${file}.webp" alt="${escapeHtml(alt)}"><figcaption>Иллюстрация</figcaption>
+    <img src="img/${file}.webp?v=3" alt="${escapeHtml(alt)}"><figcaption>Иллюстрация</figcaption>
   </figure>`;
 
   function nextCity(from = pet.postcards[0]?.cityId) {
@@ -497,7 +497,7 @@
       ${pet.postcards.length ? `<div class="photo-stack">${pet.postcards.map((card) => {
         const city = cityById(card.cityId);
         return `<button class="print" type="button" data-action="postcard" data-value="${escapeHtml(card.id)}">
-          <img src="img/${photoFor(city, pet.species)}.webp" alt="" loading="lazy">
+          <img src="img/${photoFor(city, pet.species)}.webp?v=3" alt="" loading="lazy">
           <span>${city.name}</span><small>Иллюстрация</small></button>`;
       }).join('')}</div>` : '<p>Первая открытка появится после поездки.</p>'}
       <div class="sheet-row">${button('Паспорт', 'passport')}${button('Маршруты', 'destinations')}</div>`;
@@ -520,7 +520,7 @@
     const file = photoFor(city, animal);
     const video = videos[animal]?.[city.id];
     return video ? `<figure class="sheet-photo">
-      <video controls playsinline muted preload="metadata" poster="img/${file}.webp" aria-label="ИИ-видео: ${city.name}">
+      <video controls playsinline muted preload="metadata" poster="img/${file}.webp?v=3" aria-label="ИИ-видео: ${city.name}">
         <source src="video/${video}.mp4" type="video/mp4"></video><figcaption>ИИ-видео</figcaption>
       </figure>` : figure(file, city.name);
   }
