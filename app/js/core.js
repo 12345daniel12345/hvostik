@@ -9,6 +9,7 @@
     { id: 'walk', focus: 'movement', cat: 'Выйти на 10 минут', dog: 'Погулять со мной 10 минут' },
     { id: 'water', focus: 'water', cat: 'Выпить стакан воды', dog: 'Выпить стакан воды' },
     { id: 'breath', focus: 'calm', cat: 'Сделать три спокойных вдоха', dog: 'Сделать три спокойных вдоха' },
+    { id: 'tea', focus: 'calm', cityId: 'tula', cat: 'Заварить чай и спокойно выпить', dog: 'Заварить чай и спокойно выпить' },
   ];
 
   const FOCUS = [
@@ -51,15 +52,17 @@
     return pet.care?.dayKey === dayKey ? pet.care : null;
   }
 
-  function chooseCare(pet, focusId, dayKey) {
+  function chooseCare(pet, focusId, dayKey, taskId) {
     const focus = FOCUS.find((item) => item.id === focusId);
     if (!focus) throw new Error('Нет такого направления: ' + focusId);
+    const task = TASKS.find((item) => item.id === (taskId ?? focus.taskId) && item.focus === focusId);
+    if (!task) throw new Error('Нет такого дела для направления: ' + focusId);
     const current = careForDay(pet, dayKey);
     if (current?.done) return { pet, changed: false };
-    if (current?.focus === focusId) return { pet, changed: false };
+    if (current?.taskId === task.id) return { pet, changed: false };
     return {
       pet: Object.assign({}, pet, {
-        care: { dayKey, focus: focusId, taskId: focus.taskId, done: false, tripUsed: false },
+        care: { dayKey, focus: focusId, taskId: task.id, done: false, tripUsed: false },
       }),
       changed: true,
     };

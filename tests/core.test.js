@@ -3,6 +3,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const H = require('../app/js/core.js');
+const { isSwipe } = require('../app/js/pet-anim.js');
 const data = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'cities.json'), 'utf8'));
 const cities = data.cities;
 const HOUR = 60 * 60 * 1000;
@@ -40,6 +41,20 @@ test('выбранное дело отмечается один раз и не �
   assert.equal(r.changed, true); assert.equal(p.care.done, true); assert.equal(p.energy, undefined);
   r = H.doTask(p, 'water', D1);
   assert.equal(r.changed, false);
+});
+
+test('чаепитие в Туле можно выбрать вместо дыхания и отметить один раз', () => {
+  const initial = H.newPet({ name: 'Пряник' });
+  const breath = H.chooseCare(initial, 'calm', D1).pet;
+  const tea = H.chooseCare(breath, 'calm', D1, 'tea');
+  assert.equal(tea.changed, true);
+  assert.equal(tea.pet.care.taskId, 'tea');
+  assert.equal(H.chooseCare(tea.pet, 'calm', D1, 'tea').changed, false);
+  assert.equal(H.doTask(tea.pet, 'breath', D1).changed, false);
+  const result = H.doTask(tea.pet, 'tea', D1);
+  assert.equal(result.changed, true);
+  assert.equal(H.doTask(result.pet, 'tea', D1).changed, false);
+  assert.throws(() => H.chooseCare(initial, 'water', D1, 'tea'));
 });
 
 test('второе дело в тот же день не открывает ещё одну поездку', () => {
@@ -202,6 +217,30 @@ test('id городов уникальны', () => {
 
 test('пометка «проверено» стоит честно: пока все false', () => {
   assert.ok(cities.every((c) => c.проверено === false));
+});
+
+console.log('\nЖесты');
+
+test('выбор питомца принимает свайп в обе стороны', () => {
+  assert.equal(isSwipe('side', -75, 14), true);
+  assert.equal(isSwipe('side', 75, -14), true);
+  assert.equal(isSwipe('side', 34, 0), false);
+  assert.equal(isSwipe('side', -48, 42), false);
+});
+
+test('дело и дневник принимают свайп вверх', () => {
+  assert.equal(isSwipe('up', 13, -68), true);
+  assert.equal(isSwipe('up', 0, -44), true);
+  assert.equal(isSwipe('up', 0, -43), false);
+  assert.equal(isSwipe('up', 6, 75), false);
+  assert.equal(isSwipe('up', 66, -45), false);
+});
+
+test('шторка принимает свайп вниз', () => {
+  assert.equal(isSwipe('down', -14, 77), true);
+  assert.equal(isSwipe('down', 0, 26), false);
+  assert.equal(isSwipe('down', 0, -75), false);
+  assert.equal(isSwipe('down', 56, 49), false);
 });
 
 console.log('\nИтог: пройдено ' + passed + ' проверок' + (process.exitCode ? ', есть ошибки' : ', ошибок нет'));
