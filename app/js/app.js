@@ -293,7 +293,10 @@
     box.hidden = false;
     const visible = box.querySelector('#subtitle-text');
     box.querySelector('#subtitle-live').textContent = text;
-    if (!sheet.open && !menuOpen) voice.say(text, guestMode ? guest?.species : pet?.species, { child });
+    if (!sheet.open && !menuOpen) {
+      voice.say(text, guestMode ? guest?.species : pet?.species, { child });
+      petAnimation.talk?.(art, voice.duration(text) || text.split(' ').length * 380);
+    }
     if (!animate || reducedMotion.matches) {
       visible.textContent = text;
       return;
@@ -408,7 +411,7 @@
     controls.innerHTML = sceneView(state);
     if (state.mode === 'call' && vibratedFor !== arrivalCard()?.id) {
       vibratedFor = arrivalCard()?.id;
-      navigator.vibrate?.([260, 140, 260, 140, 260]);
+      if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.([260, 140, 260, 140, 260]);
     }
     setupSpeech(state);
     menuButton.hidden = guestMode || !pet || choosing;

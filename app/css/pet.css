@@ -114,3 +114,20 @@
   from { transform: scale(1.01); }
   to { transform: scale(1.059) translateY(-.25%); }
 }
+
+/* Живое видео питомца (28.11.2026): видео лежит поверх картинки и проявляется, когда начало играть. */
+.pet-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--photo-x, 50%) top;
+  opacity: 0;
+  transition: opacity 400ms var(--ease);
+  filter: var(--fur-tone, none);
+  pointer-events: none;
+}
+.pet-live .pet-video-idle { opacity: 1; }
+.pet-live.pet-talking .pet-video-talk { opacity: 1; }
+.pet-live .pet-breath { animation: none; }
