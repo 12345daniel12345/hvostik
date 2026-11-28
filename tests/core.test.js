@@ -76,30 +76,62 @@ test('неизвестные направление и дело — ошибка
   assert.throws(() => H.doTask(p, 'дневник', D1));
 });
 
-test('первая поездка начинается без дела и возвращается через несколько секунд', () => {
+test('первая поездка бесплатна и длится ровно 60 секунд', () => {
   const now = 1000 * HOUR;
   const p = H.startTrip(H.newPet({ name: 'Пряник' }), 'tula', cities, now, D1);
   assert.equal(p.trip.kind, 'intro');
-  assert.equal(p.trip.returnAt, now + H.INTRO_TRIP_SECONDS * 1000);
+  assert.equal(p.trip.fromCityId, 'moscow');
+  assert.equal(p.trip.returnAt, now + 60_000);
+  assert.equal(p.care, null);
+});
+
+test('после знакомства или пропуска оно не повторяется при загрузке', () => {
+  const p = H.newPet({ name: 'Бублик', species: 'dog' });
+  assert.equal(H.normalizePet(p).introSeen, false);
+  const seen = H.seeIntro(p);
+  assert.equal(p.introSeen, false);
+  assert.equal(H.seeIntro(seen), seen);
+  assert.equal(H.normalizePet(JSON.parse(JSON.stringify(seen))).introSeen, true);
+  assert.equal(seen.introDone, false);
+});
+
+test('поездка начинается только с явно выбранным открытым городом', () => {
+  const p = { ...H.seeIntro(H.newPet({ name: 'Пряник' })), nextStopId: 'tula' };
+  assert.throws(() => H.startTrip(p, undefined, cities, 0, D1), /Выбери город/);
+  assert.throws(() => H.startTrip(p, 'unknown', cities, 0, D1), /Такого города нет/);
+  assert.throws(() => H.startTrip(p, 'kazan', cities, 0, D1), /ещё готовим/);
+  assert.equal(H.startTrip(p, 'yaroslavl', cities, 0, D1).trip.cityId, 'yaroslavl');
+  assert.equal(p.trip, null);
+});
+
+test('из дома нельзя поехать в Москву, со стоянки — в тот же город', () => {
+  const p = H.newPet({ name: 'Пряник' });
+  assert.throws(() => H.startTrip(p, 'moscow', cities, 0, D1), /уже здесь/);
+  const arrived = H.finishTrip(H.startTrip(p, 'tula', cities, 0, D1), cities, 60_000, 'a').pet;
+  const ready = H.doTask(arrived, 'tea', D1).pet;
+  assert.throws(() => H.startTrip(ready, 'tula', cities, 60_000, D1), /уже здесь/);
+  assert.equal(ready.care.tripUsed, false);
+  assert.equal(H.startTrip(ready, 'yaroslavl', cities, 60_000, D1).trip.fromCityId, 'tula');
 });
 
 test('после первой поездки нужна забота о себе', () => {
   let p = H.startTrip(H.newPet({ name: 'Пряник' }), 'tula', cities, 0, D1);
   p = H.finishTrip(p, cities, H.INTRO_TRIP_SECONDS * 1000, 'intro').pet;
   assert.equal(p.introDone, true);
-  assert.equal(H.canStartTrip(p, 'kazan', cities, D1).ok, false);
-  assert.throws(() => H.startTrip(p, 'kazan', cities, 0, D1));
+  assert.equal(H.canStartTrip(p, 'yaroslavl', cities, D1).ok, false);
+  assert.throws(() => H.startTrip(p, 'yaroslavl', cities, 0, D1), /Сначала сделай/);
 });
 
 test('во время поездки вторая не начинается', () => {
   const p = H.startTrip(H.newPet({ name: 'Пряник' }), 'tula', cities, 0, D1);
-  assert.equal(H.canStartTrip(p, 'kazan', cities, D1).ok, false);
+  assert.equal(H.canStartTrip(p, 'yaroslavl', cities, D1).ok, false);
 });
 
 test('одно выполненное дело открывает ровно одну поездку на 8 часов', () => {
   let p = H.newPet({ name: 'Пряник' }); p.introDone = true;
   p = H.doTask(p, 'walk', D1).pet;
-  p = H.startTrip(p, 'kazan', cities, 0, D1);
+  assert.equal(p.trip, null);
+  p = H.startTrip(p, 'yaroslavl', cities, 0, D1);
   assert.equal(p.trip.kind, 'care'); assert.equal(p.trip.returnAt, H.TRIP_HOURS * HOUR);
   assert.equal(p.care.tripUsed, true);
   p = H.finishTrip(p, cities, H.TRIP_HOURS * HOUR, 'c1').pet;
@@ -149,11 +181,28 @@ test('паспорт считает города, маршруты и верны
 
 test('старый питомец сохраняется и переводится на новые правила', () => {
   const old = H.newPet({ name: 'Пряник' });
-  delete old.introDone; old.energy = 5; old.doneTasks = ['water'];
+  delete old.introDone; delete old.introSeen; old.energy = 5; old.doneTasks = ['water'];
   old.postcards = [{ id: 'old', cityId: 'tula' }]; old.visited = ['tula'];
   const p = H.normalizePet(old);
   assert.equal(p.introDone, true); assert.equal(p.care, null); assert.equal(p.name, 'Пряник');
+  assert.equal(p.introSeen, true);
   assert.deepEqual(p.visited, ['tula']);
+});
+
+test('старый Бублик в Туле сохраняет дело и может выбрать Ярославль', () => {
+  const care = { dayKey: D1, taskId: 'tea', focus: 'calm', done: true, tripUsed: false };
+  const old = {
+    name: 'Бублик', species: 'dog', care, trip: null, visited: ['tula'], wish: [],
+    postcards: [{ id: 'tula-old', cityId: 'tula', answered: true, correct: true }],
+    arrival: { cardId: 'tula-old', answered: true },
+  };
+  const p = H.normalizePet(old);
+  assert.equal(p.introSeen, true);
+  assert.equal(p.introDone, true);
+  assert.equal(H.currentCityId(p), 'tula');
+  assert.deepEqual(H.careForDay(p, D1), care);
+  assert.deepEqual(p.arrival, old.arrival);
+  assert.equal(H.startTrip(p, 'yaroslavl', cities, 0, D1).trip.kind, 'care');
 });
 
 test('«Хочу сюда» включается и выключается', () => {

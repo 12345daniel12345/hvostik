@@ -111,7 +111,7 @@ window.HVRouteMap = (() => {
     </g>`;
   }
 
-  function render(fromId, toId) {
+  function roadRoute(fromId, toId) {
     const from = corridor.indexOf(fromId), to = corridor.indexOf(toId);
     if (from === -1 || to === -1 || from === to) return null;
     const lower = Math.min(from, to), upper = Math.max(from, to);
@@ -120,6 +120,19 @@ window.HVRouteMap = (() => {
     if (from > to) stops.reverse();
     const roads = upper <= junction ? 'по трассе М-2' : lower >= junction ? 'по трассе М-8' : 'по трассам М-2 и М-8';
     const km = stops.slice(1).reduce((sum, stop, i) => sum + distance(stops[i], stop), 0);
+    return { stops, roads, km };
+  }
+
+  function tripDistance(from, to) {
+    const road = roadRoute(from.id, to.id);
+    return road ? `≈ ${Math.round(road.km)} км ${road.roads}`
+      : `≈ ${Math.round(distance(from.coordinates, to.coordinates))} км по прямой`;
+  }
+
+  function render(fromId, toId) {
+    const road = roadRoute(fromId, toId);
+    if (!road) return null;
+    const { stops, roads, km } = road;
     const projected = stops.map(({ lon, lat }) => rotate(map.project(lon, lat)));
     const view = frame(projected);
     const points = projected.map(view.place);
@@ -158,5 +171,40 @@ window.HVRouteMap = (() => {
     </div>`;
   }
 
-  return { distance, render };
+  const central = ['moscow', 'tula', 'yaroslavl', 'suzdal'];
+  const centralLabels = { moscow: [-42, -8], tula: [33, 0], yaroslavl: [42, -12], suzdal: [40, 0] };
+  const overviewLabels = {
+    kaliningrad: [55, 26], murmansk: [143, 39], spb: [125, 71],
+    moscow: [70, 109], 'veliky-ustyug': [176, 108], kazan: [121, 144],
+    sochi: [40, 151], novosibirsk: [148, 183], baikal: [217, 147], vladivostok: [241, 211],
+  };
+
+  function choiceMap(places, overview) {
+    const coordinates = (city) => map.project(city.coordinates.lon, city.coordinates.lat);
+    const centralPlaces = places.filter(({ id }) => central.includes(id));
+    const view = frame(centralPlaces.map((city) => rotate(coordinates(city))));
+    const markers = (overview ? places.filter(({ id }) => id === 'moscow' || !central.includes(id)) : centralPlaces)
+      .map((city) => {
+        const point = coordinates(city);
+        if (overview) {
+          return { city, point: { x: point.x * .29 + 5, y: point.y * .29 + 14 }, label: overviewLabels[city.id] };
+        }
+        const placed = view.place(rotate(point));
+        const [dx, dy] = centralLabels[city.id];
+        return { city, point: placed, label: [placed.x + dx, placed.y + dy] };
+      });
+    const land = overview
+      ? `<g transform="translate(5 14) scale(.29)"><path class="russia-shape" fill-rule="evenodd" d="${map.shape}"></path></g>`
+      : geography(view);
+    return {
+      markers, width, height,
+      background: `<svg class="route-map route-map-detailed" viewBox="0 ${-height} ${width} ${3 * height}" aria-hidden="true">
+        ${land}
+        ${markers.map(({ point, label }) => label
+          ? `<path class="map-choice-leader" d="M${xy(point)} L${label.join(' ')}"></path>` : '').join('')}
+      </svg>`,
+    };
+  }
+
+  return { distance, render, tripDistance, choiceMap };
 })();

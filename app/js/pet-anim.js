@@ -22,6 +22,7 @@
   };
   let active;
   let talkTimer;
+  let pauseTimer;
   let lightTimer;
 
   function scheduleLight() {
@@ -36,6 +37,8 @@
   }
 
   function mount(stage, file) {
+    clearTimeout(talkTimer);
+    clearTimeout(pauseTimer);
     const existing = stage.querySelector('.pet-current');
     const previous = stage.querySelector('.pet-previous');
     previous?.remove();
@@ -98,17 +101,18 @@
 
   // Питомец «говорит» на экране столько, сколько длится реплика.
   function talk(stage, ms) {
-    const layer = stage.querySelector('.pet-current.pet-live');
+    const layer = stage.querySelector('.pet-current');
     const video = layer?.querySelector('.pet-video-talk');
     if (!video || reducedMotion.matches) return;
     clearTimeout(talkTimer);
+    clearTimeout(pauseTimer);
     if (!layer.classList.contains('pet-talking')) {
       video.currentTime = 0;
       video.play().then(() => layer.classList.add('pet-talking')).catch(() => {});
     }
     talkTimer = setTimeout(() => {
       layer.classList.remove('pet-talking');
-      setTimeout(() => video.pause(), 400);
+      pauseTimer = setTimeout(() => video.pause(), 400);
     }, Math.max(1600, ms));
   }
 

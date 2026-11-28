@@ -18,7 +18,7 @@
 
   function pickVoice() {
     if (!supported) return;
-    const ru = synth.getVoices().filter((item) => item.lang?.toLowerCase().startsWith('ru'));
+    const ru = synth.getVoices().filter((item) => item.localService && item.lang?.toLowerCase().startsWith('ru'));
     // Предпочитаем «живые» голоса, если телефон их предлагает.
     voice = ru.find((item) => /natural|neural|premium|enhanced|milena|yuri|google/i.test(item.name)) ?? ru[0] ?? null;
   }
@@ -37,12 +37,12 @@
   }
 
   function say(text, species = 'cat', options = {}) {
-    if (!supported || !enabled || !unlocked || !text) return false;
+    if (!supported || !enabled || !unlocked || !voice || !text) return false;
     stop();
     const utterance = new root.SpeechSynthesisUtterance(String(text).replace(/[«»]/g, ''));
     const base = tone[species] ?? tone.cat;
     utterance.lang = 'ru-RU';
-    if (voice) utterance.voice = voice;
+    utterance.voice = voice;
     utterance.pitch = base.pitch;
     utterance.rate = base.rate * (options.child ? 0.93 : 1);
     utterance.volume = 1;
@@ -52,7 +52,7 @@
 
   // Сколько ждать до следующей фразы, чтобы питомец успел договорить.
   function duration(text) {
-    if (!supported || !enabled || !unlocked || !text) return 0;
+    if (!supported || !enabled || !unlocked || !voice || !text) return 0;
     const words = String(text).split(/\s+/).length;
     return Math.round(words * 420 + 1200);
   }
@@ -66,6 +66,7 @@
   root.HVVoice = {
     supported,
     get enabled() { return enabled; },
+    get speaking() { return supported && synth.speaking; },
     setEnabled, say, stop, duration,
   };
 })(window);

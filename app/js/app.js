@@ -4,10 +4,12 @@
   const H = window.Hvostik;
   const petAnimation = window.HVPet;
   const cities = window.HV_CITIES;
-  // Людям показываем только сверенные города; полный список нужен для старых сохранений.
   const openCities = cities.filter((city) => city.проверено !== false);
   const videos = window.HV_VIDEOS || {};
   const mapData = window.HVMap;
+  const homeCity = { id: H.HOME_CITY_ID, name: mapData.home.name, coordinates: mapData.home };
+  const mapCities = [homeCity, ...cities];
+  const mapLine = 'Выбирай! Я уже собрал рюкзак.';
   const voice = window.HVVoice ?? { supported: false, enabled: false, say() {}, stop() {}, duration: () => 0, setEnabled() {} };
   let vibratedFor = null;
   const params = new URLSearchParams(location.search);
@@ -41,10 +43,11 @@
   let sheetView;
   let sheetReturnFocus;
   let cardId;
+  let selectedCityId;
+  let overviewMap;
   let menuOpen = false;
   let returnTimer;
   let routeTimer;
-  let journeyTimer;
   let renderedDay;
   let renderedLight;
   let renderedScene;
@@ -53,7 +56,11 @@
   let lineIndex = 0;
   let speechTimer;
   let typingTimer;
-  let cheeringAt;
+  let nextSpeechAt;
+  let introIndex = 0;
+  let greeting = false;
+  let greetingPending = false;
+  let wasAway = false;
 
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, (char) => ({
@@ -110,9 +117,10 @@
     <img src="img/${file}.webp?v=4" alt="${escapeHtml(alt)}"><figcaption>Иллюстрация</figcaption>
   </figure>`;
 
-  function nextCity(from = pet.postcards[0]?.cityId) {
-    const chosen = openCities.find((city) => city.id === pet.nextStopId);
-    return chosen ?? openCities[(openCities.findIndex((city) => city.id === from) + 1) % openCities.length];
+  function nextCity() {
+    const from = H.currentCityId(pet);
+    const wished = openCities.find((city) => city.id === pet.nextStopId && city.id !== from);
+    return wished ?? openCities[(openCities.findIndex((city) => city.id === from) + 1) % openCities.length];
   }
 
   function restingPhoto(animal, city) {
@@ -133,7 +141,7 @@
       return { mode: 'guest', city, file: restingPhoto(guest?.species ?? 'cat', city) };
     }
     if (!pet || choosing) return { mode: 'choose', file: `${selectedSpecies}-home` };
-    if (cheeringAt) return stopScene('joy', cheeringAt);
+    if (!pet.introSeen) return { mode: 'intro', file: `${pet.species}-home` };
     if (pet.trip) {
       const city = cityById(pet.trip.cityId);
       const night = pet.trip.kind === 'care' && renderedLight === 'night';
@@ -141,8 +149,13 @@
       return { mode: night ? 'night' : 'trip', city, file };
     }
     const card = arrivalCard();
-    const city = cityById(card?.cityId ?? pet.postcards[0]?.cityId);
-    if (card) return stopScene(pet.arrival.answered ? 'story' : 'call', city);
+    const city = cityById(H.currentCityId(pet));
+    if (card && !pet.arrival.answered) return stopScene('call', city);
+    const care = H.careForDay(pet, renderedDay);
+    if (pet.introDone && care?.done && !care.tripUsed) {
+      return city ? stopScene('joy', city) : { mode: 'joy', file: `${pet.species}-home` };
+    }
+    if (card && !pet.arrival.storySeen) return stopScene('story', city);
     return { mode: 'home', city, file: restingPhoto(pet.species, city) };
   }
 
@@ -175,9 +188,15 @@
   const genitive = (name) => genitiveNames[name] ?? name;
   const accusativeNames = { 'Тула': 'Тулу', 'Москва': 'Москву' };
   const accusative = (name) => accusativeNames[name] ?? name;
+  const cityPlaces = {
+    tula: 'Туле', kazan: 'Казани', baikal: 'на Байкале', 'veliky-ustyug': 'Великом Устюге',
+    spb: 'Санкт-Петербурге', murmansk: 'Мурманске', sochi: 'Сочи', suzdal: 'Суздале',
+    yaroslavl: 'Ярославле', kaliningrad: 'Калининграде', vladivostok: 'Владивостоке', novosibirsk: 'Новосибирске',
+  };
 
   function summonPet() {
     if (!pet?.trip) return;
+    greeting = false;
     petAnimation.react(art);
     clearTimeout(speechTimer);
     speak(whereAmI());
@@ -191,7 +210,7 @@
 
   function choiceView() {
     const [label] = species[selectedSpecies];
-    return `${heading(label, 'Выбери спутника')}
+    return `${heading('Выбери попутчика', label)}
       <form id="adopt" class="scene-bottom">
         <div class="species-switch" role="group" aria-label="Выбор питомца">
           ${button('‹', 'species', 'aria-label="Предыдущий питомец"', 'round')}
@@ -201,7 +220,7 @@
         <label class="name-field glass" for="pet-name"><span>Имя питомца</span>
           <input id="pet-name" name="pet-name" maxlength="20" required autocomplete="off" value="${escapeHtml(draftName)}">
         </label>
-        <button class="button primary" type="submit">Выбрать</button>
+        <button class="button primary" type="submit">Это мой попутчик</button>
         ${choosing ? button('Вернуться', 'cancel-choice', '', 'text-button') : ''}
       </form>`;
   }
@@ -224,6 +243,11 @@
           <a class="button primary" href="index.html">Завести питомца</a></div>`;
     }
     const name = escapeHtml(pet.name);
+    if (mode === 'intro') {
+      return `${heading(name, 'Дома')}<div class="scene-bottom">${subtitle()}
+        ${button(introIndex === 4 ? 'Открыть карту' : 'Дальше', 'advance-intro', '', 'primary')}
+        ${introIndex === 4 ? '' : button('Пропустить', 'finish-intro', '', 'text-button intro-skip')}</div>`;
+    }
     if (mode === 'call') {
       return `${heading(`${name} · ${city.name}`, 'Входящий звонок')}<div class="scene-bottom call-bottom">
         <button class="button primary answer-call" type="button" data-action="answer-call" aria-label="Ответить">
@@ -234,12 +258,9 @@
       return `${heading(name, mode === 'trip' ? 'В дороге' : 'В дороге · ночь')}
         <div class="scene-bottom">${subtitle()}${routeThread(city)}</div>${pawCall()}${diaryHandle()}`;
     }
-    const context = mode === 'story' || mode === 'joy' ? 'На остановке' : city?.name ?? 'Дома';
-    const place = mode === 'story' || mode === 'joy' ? city.name : name;
-    return `${heading(place, context)}
+    return `${heading(city?.name ?? name, city ? 'На остановке' : 'Дома')}
       <div class="scene-bottom">${subtitle()}
         ${mode === 'story' ? unverified(city) : ''}
-        ${!pet.introDone ? button(`Поехать · ${nextCity().name}`, 'intro', '', 'primary') : ''}
         <div id="scene-action" hidden></div>
       </div>${diaryHandle()}`;
   }
@@ -252,6 +273,12 @@
     const preferred = linkedTask ?? tasks.find((task) => task.cityId) ?? tasks.find((task) => task.id === 'breath');
     const text = linkedTask ? '' : typeof link === 'string' ? link : link?.действие;
     return { task: stored ?? preferred, text: !stored || stored.id === preferred.id ? text : '' };
+  }
+
+  function taskTransition(city) {
+    const { task, text } = taskFor(city);
+    const label = (text || task[pet.species]).replace(/^./u, (first) => first.toLowerCase()).replace(/[.!?]$/, '');
+    return `Чтобы ехать дальше, сделай для себя одно дело. Здесь подходит: ${label}.`;
   }
 
   function renderTask(city) {
@@ -276,7 +303,37 @@
         labeled('Что попробовать', city.food), labeled('Когда ехать', city.when)];
     const joke = window.HV_PHRASES[city.id];
     if (joke && pet.jokeDay !== localDay()) facts.push({ text: joke, joke: true });
+    const care = H.careForDay(pet, renderedDay);
+    facts.push(care?.tripUsed ? 'Завтра — следующая остановка.' : taskTransition(city));
     return facts.filter(Boolean);
+  }
+
+  function introLines() {
+    const dog = pet.species === 'dog';
+    return [
+      `Спасибо, что выбрал меня! Меня зовут ${pet.name}.`,
+      `Я — ${dog ? 'пёс' : 'кот'}-путешественник: катаюсь по настоящим городам России и рассказываю, чем они интересны.`,
+      `${dog ? 'Мои лапы сами не побегут.' : 'Сам я в дорогу не соберусь.'} Мой билет — твоё маленькое полезное дело: стакан воды, прогулка, спокойный чай.`,
+      'Одно дело в день — один переезд. Ничего не теряется, даже если ты пропустишь день.',
+      'А первую поездку я дарю. Посмотри на карту и выбери, куда меня отправить!',
+    ];
+  }
+
+  function tripLine(city) {
+    const destination = accusative(city.name);
+    if (pet.trip.kind === 'intro') return `Еду в ${destination}! Первую дорогу проеду быстро — позвоню через минуту.`;
+    const time = timeFormat.format(pet.trip.returnAt);
+    return H.careForDay(pet, renderedDay)?.done
+      ? `Я в пути. Позвоню около ${time}. Завтра — новое дело и новая дорога.`
+      : `Еду в ${destination}. Позвоню около ${time}.`;
+  }
+
+  function welcomeLine({ mode, city }) {
+    if (mode === 'trip' || mode === 'night') return `Я ещё в дороге в ${accusative(city.name)}.`;
+    if (!['home', 'story', 'joy'].includes(mode)) return '';
+    if (!city) return 'Я дома и жду, куда поедем.';
+    const place = cityPlaces[city.id] ?? city.name;
+    return `С возвращением! Я ${city.id === 'baikal' ? place : `в ${place}`}.`;
   }
 
   function clearSpeech() {
@@ -284,7 +341,7 @@
     clearInterval(typingTimer);
   }
 
-  function speak(line, animate = true) {
+  function speak(line, animate = true, audible = true) {
     clearInterval(typingTimer);
     const box = controls.querySelector('#subtitle');
     if (!box) return;
@@ -293,9 +350,11 @@
     box.hidden = false;
     const visible = box.querySelector('#subtitle-text');
     box.querySelector('#subtitle-live').textContent = text;
-    if (!sheet.open && !menuOpen) {
+    const duration = voice.duration(text);
+    nextSpeechAt = performance.now() + Math.max(5000, duration);
+    if (audible && !sheet.open && !menuOpen && !document.hidden) {
       voice.say(text, guestMode ? guest?.species : pet?.species, { child });
-      petAnimation.talk?.(art, voice.duration(text) || text.split(' ').length * 380);
+      petAnimation.talk?.(art, duration || text.split(' ').length * 380);
     }
     if (!animate || reducedMotion.matches) {
       visible.textContent = text;
@@ -312,74 +371,98 @@
 
   function scheduleSpeech() {
     clearTimeout(speechTimer);
-    if (lineIndex < lines.length && !sheet.open && !menuOpen && !document.hidden) {
-      const current = lines[lineIndex];
-      speechTimer = setTimeout(advanceSpeech, Math.max(5000, voice.duration(typeof current === 'string' ? current : current?.text)));
+    if (sheet.open || menuOpen || document.hidden || renderedScene.mode === 'intro') return;
+    if (greeting || renderedScene.mode === 'story' || lines.length > 1) {
+      speechTimer = setTimeout(advanceWhenQuiet, Math.max(0, nextSpeechAt - performance.now()));
     }
+  }
+
+  function advanceWhenQuiet() {
+    if (voice.speaking) {
+      speechTimer = setTimeout(advanceWhenQuiet, 200);
+      return;
+    }
+    advanceSpeech();
   }
 
   function advanceSpeech() {
-    if (lineIndex >= lines.length) return;
-    lineIndex += 1;
-    if (lineIndex < lines.length) speak(lines[lineIndex]);
-    else if (renderedScene.mode === 'story') {
-      revealNextStep(renderedScene.city);
+    if (greeting) {
+      greeting = false;
+      setupSpeech(renderedScene);
+      return;
+    }
+    if (renderedScene.mode === 'intro') {
+      advanceIntro();
+      return;
+    }
+    if (renderedScene.mode === 'story' && lineIndex === lines.length - 1) {
+      savePet({ ...pet, arrival: { ...pet.arrival, storySeen: true } });
       const tap = art.querySelector('[data-action="next-line"]');
-      if (document.activeElement === tap) {
-        (controls.querySelector('.task-pill, [data-action="depart"]') ?? controls.querySelector('h1')).focus();
-      }
-      tap.hidden = true;
+      const wasFocused = document.activeElement === tap;
+      render(false, false, true);
+      if (wasFocused) (controls.querySelector('#scene-action button') ?? controls.querySelector('h1')).focus();
+      return;
     }
-    else if (lines.length > 1) {
-      lineIndex = 0;
-      speak(lines[lineIndex]);
-    }
+    if (lines.length < 2) return;
+    lineIndex = (lineIndex + 1) % lines.length;
+    speak(lines[lineIndex]);
     scheduleSpeech();
   }
 
-  function revealNextStep(city) {
-    const care = H.careForDay(pet, localDay());
-    if (care?.tripUsed) {
-      speak('Завтра — следующая остановка.');
-      return;
-    }
-    if (care?.done) {
-      controls.querySelector('#scene-action').innerHTML = button(`Поехать · ${nextCity().name}`, 'depart', '', 'primary');
-      controls.querySelector('#scene-action').hidden = false;
-      return;
-    }
-    renderTask(city);
+  function openCityButton() {
+    const label = pet.introDone ? 'Выбрать город' : 'Открыть карту';
+    return button(label, 'open-city-map', 'aria-haspopup="dialog"', 'primary');
   }
 
-  function setupSpeech(state) {
+  function revealNextStep({ mode, city }) {
+    if (mode !== 'home' && mode !== 'joy') return;
+    const care = H.careForDay(pet, localDay());
+    if (!pet.introDone || (care?.done && !care.tripUsed)) {
+      const slot = controls.querySelector('#scene-action');
+      slot.innerHTML = openCityButton();
+      slot.hidden = false;
+    } else if (!care?.tripUsed) {
+      renderTask(city);
+    }
+  }
+
+  function setupSpeech(state, returning = false, keepSubtitle = false) {
     clearSpeech();
+    greeting = false;
     const key = `${state.mode}/${state.city?.id ?? ''}/${arrivalCard()?.id ?? ''}/${child}/${renderedDay}`;
     if (key !== speechKey) {
       speechKey = key;
       lineIndex = 0;
       const { mode, city } = state;
       lines = ({
-        home: () => pet.introDone
-          ? [pet.care?.dayKey < renderedDay && !pet.care.done
-            ? 'Сегодня достаточно одного маленького дела.' : 'Одно небольшое дело — и я продолжу путь.']
-          : ['Я готов к первой поездке. Поехали в Тулу?'],
-        trip: () => pet.trip.kind === 'intro' ? [city.tagline] : [city.tagline, `Следующий звонок около ${timeFormat.format(pet.trip.returnAt)}.`],
+        intro: introLines,
+        home: () => [!pet.introDone ? 'Я дома и жду, куда поедем.'
+          : H.careForDay(pet, renderedDay)?.tripUsed ? 'Завтра — следующая остановка.' : taskTransition(city)],
+        trip: () => [tripLine(city)],
         night: () => ['Завтра — следующая остановка.'],
         story: () => storyLines(city),
-        joy: () => ['Спасибо! Пора дальше.'],
+        joy: () => ['Спасибо! Это и есть мой билет. Куда дальше?'],
         guest: () => guest ? [city.tagline, city.fact] : [],
       }[mode] ?? (() => []))();
-      if (mode === 'home' && !pet.introDone && nextCity().id !== 'tula') {
-        lines = ['Я готов к первой поездке. Поехали?'];
-      }
+    } else if (state.mode === 'home' && pet.introDone && !H.careForDay(pet, renderedDay)?.tripUsed) {
+      lines = [taskTransition(state.city)];
     }
-    if (lines.length) speak(lines[Math.min(lineIndex, lines.length - 1)], lineIndex < lines.length);
-    if ((state.mode === 'story' && lineIndex >= lines.length) || (state.mode === 'home' && pet.introDone)) {
-      revealNextStep(state.city);
+    if (state.mode === 'intro') lineIndex = introIndex;
+    const welcome = returning && welcomeLine(state);
+    if (welcome) {
+      greeting = welcome !== lines[lineIndex];
+      speak(welcome, false);
+    } else if (lines.length) {
+      speak(lines[lineIndex], state.mode !== 'intro' && !keepSubtitle, !keepSubtitle);
+    } else {
+      voice.stop();
     }
-    const canSpeak = state.mode === 'story' ? lineIndex < lines.length : lines.length > 1;
+    revealNextStep(state);
     const tap = art.querySelector('[data-action="next-line"]');
-    if (tap) tap.hidden = !canSpeak;
+    if (tap) {
+      tap.hidden = lines.length < 2;
+      tap.setAttribute('aria-label', state.mode === 'intro' && introIndex === lines.length - 1 ? 'Открыть карту' : 'Следующая реплика');
+    }
     scheduleSpeech();
   }
 
@@ -395,47 +478,62 @@
       ${button('Сбросить питомца', 'reset', '', 'reset')}`;
   }
 
-  function render(focusHeading = false) {
+  function render(focusHeading = false, returning = false, keepSubtitle = false) {
     renderedDay = localDay();
     renderedLight = lightAt(new Date().getHours());
     const state = scene();
     screen.dataset.scene = state.mode;
     screen.dataset.light = renderedLight;
-    const photoKey = `${state.file}/${pet?.color ?? ''}`;
-    if (art.dataset.photo !== photoKey) {
+    if (art.dataset.photo !== state.file) {
       petAnimation.mount(art, state.file);
-      art.dataset.photo = photoKey;
-      art.dataset.fur = pet?.color ?? '';
+      art.dataset.photo = state.file;
     }
+    art.dataset.fur = pet?.color ?? '';
     renderedScene = state;
     controls.innerHTML = sceneView(state);
     if (state.mode === 'call' && vibratedFor !== arrivalCard()?.id) {
       vibratedFor = arrivalCard()?.id;
       if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.([260, 140, 260, 140, 260]);
     }
-    setupSpeech(state);
+    setupSpeech(state, returning, keepSubtitle);
     menuButton.hidden = guestMode || !pet || choosing;
     renderMenu();
     updateRoute();
     if (focusHeading && !sheet.open) controls.querySelector('h1')?.focus({ preventScroll: true });
   }
 
-  function startTrip(city, traveller = pet, cheerCity = null, now = new Date()) {
+  function startTrip(cityId) {
+    const now = new Date();
     const today = localDay(now);
-    if (!H.canStartTrip(traveller, city.id, cities, today).ok) return;
-    const fromCityId = traveller.postcards[0]?.cityId;
-    const next = H.startTrip(traveller, city.id, cities, now.getTime(), today);
-    savePet({ ...next, arrival: null, nextStopId: null, trip: { ...next.trip, fromCityId } });
-    cheeringAt = cheerCity;
+    if (!cityId || !H.canStartTrip(pet, cityId, cities, today).ok) return;
+    const next = H.startTrip(pet, cityId, cities, now.getTime(), today);
+    savePet({ ...next, arrival: null, nextStopId: null });
+    greetingPending = false;
+    closeSheet();
     render(true);
-    if (cheeringAt) {
-      petAnimation.react(art);
-      journeyTimer = setTimeout(() => {
-        cheeringAt = null;
-        render();
-      }, 850);
-    }
     checkReturn();
+  }
+
+  function finishIntro() {
+    if (renderedScene.mode !== 'intro') return;
+    savePet(H.seeIntro(pet));
+    openCityMap();
+    render();
+  }
+
+  function advanceIntro() {
+    if (introIndex === lines.length - 1) {
+      finishIntro();
+      return;
+    }
+    introIndex += 1;
+    lineIndex = introIndex;
+    speak(lines[lineIndex], false);
+    if (introIndex === lines.length - 1) {
+      controls.querySelector('[data-action="advance-intro"]').textContent = 'Открыть карту';
+      controls.querySelector('.intro-skip')?.remove();
+      art.querySelector('.scene-tap').setAttribute('aria-label', 'Открыть карту');
+    }
   }
 
   function checkReturn() {
@@ -457,9 +555,34 @@
   }
 
   function refreshClock() {
-    if (checkReturn()) return;
-    if (!guestMode && (renderedDay !== localDay() || renderedLight !== lightAt(new Date().getHours()))) render();
+    if (checkReturn()) return true;
+    if (!guestMode && (renderedDay !== localDay() || renderedLight !== lightAt(new Date().getHours()))) {
+      render();
+      if (sheetView === 'city-choice') {
+        if (canChooseCity()) updateCityCard();
+        else closeSheet();
+      }
+    }
     updateRoute();
+    return false;
+  }
+
+  function greetOnReturn() {
+    if (sheet.open || menuOpen || document.hidden) return;
+    greetingPending = false;
+    if (welcomeLine(renderedScene)) setupSpeech(renderedScene, true);
+    else scheduleSpeech();
+  }
+
+  function onReturn() {
+    if (document.hidden) return;
+    const arrived = refreshClock();
+    if (!wasAway) return;
+    wasAway = false;
+    if (!arrived) {
+      greetingPending = true;
+      greetOnReturn();
+    }
   }
 
   function changeChoice() {
@@ -474,9 +597,9 @@
     const detailed = window.HVRouteMap.render(fromId, city.id);
     if (detailed) return detailed;
 
-    const origin = cityById(fromId);
-    const originName = origin?.name ?? 'Москва';
-    const home = origin?.coordinates ?? mapData.home;
+    const origin = cityById(fromId) ?? homeCity;
+    const originName = origin.name;
+    const home = origin.coordinates;
     const start = mapData.project(home.lon, home.lat);
     const end = mapData.project(city.coordinates.lon, city.coordinates.lat);
     const separation = Math.hypot(end.x - start.x, end.y - start.y);
@@ -506,7 +629,7 @@
       return `<text x="${x}" y="${y}" text-anchor="${side}">${name}</text>`;
     };
     return `${title(`${originName} → ${city.name}`)}
-      <div class="route-meta"><span>≈ ${Math.round(window.HVRouteMap.distance(home, city.coordinates))} км по прямой</span>
+      <div class="route-meta"><span>${window.HVRouteMap.tripDistance(origin, city)}</span>
       <span class="route-percent" data-route-percent role="progressbar" aria-label="Пройдено" aria-valuenow="0">0%</span></div>
       <svg class="route-map" viewBox="${viewBox}" role="img" aria-label="${originName} → ${city.name}, по прямой">
         <path class="russia-shape" fill-rule="evenodd" d="${mapData.shape}"></path>
@@ -564,6 +687,11 @@
       <div class="sheet-row">${button('Паспорт', 'passport')}${button('Маршруты', 'destinations')}</div>`;
   }
 
+  function canChooseCity() {
+    return ['home', 'joy'].includes(renderedScene.mode)
+      && openCities.some((city) => H.canStartTrip(pet, city.id, cities, localDay()).ok);
+  }
+
   function destinationsView() {
     const passport = H.passport(pet, openCities);
     return `${title('Маршруты')}${button('‹ Дневник', 'diary', '', 'text-button')}
@@ -571,10 +699,81 @@
       <div class="route-list">${passport.routes.map((route) => `<div class="route-label">
         <label>${route.name}<progress value="${route.done}" max="${route.total}"></progress></label>
         <small>${route.done} / ${route.total}</small></div>`).join('')}</div>
-      ${pet.trip ? '' : `<form id="destination-form"><label for="destination">Следующая остановка</label>
-        <select id="destination" name="city">${openCities.filter((city) => city.id !== pet.postcards[0]?.cityId)
-          .map((city) => `<option value="${city.id}" ${nextCity().id === city.id ? 'selected' : ''}>${city.name}</option>`).join('')}
-        </select><button class="button primary" type="submit">Выбрать остановку</button></form>`}`;
+      ${canChooseCity() ? openCityButton() : ''}`;
+  }
+
+  function cityChoiceCard() {
+    const city = mapCities.find(({ id }) => id === selectedCityId);
+    if (!city) return '<p class="map-card-hint">Коснись города, чтобы посмотреть, куда можно поехать.</p>';
+    const name = `<h3>${city.name}</h3>`;
+    if (city.id === homeCity.id) return `${name}<p>Дом питомца</p>`;
+    const current = city.id === H.currentCityId(pet);
+    const check = H.canStartTrip(pet, city.id, cities, localDay());
+    if (city.проверено === false) return `${name}<p>${current ? 'Я здесь · ' : ''}Этот город ещё готовим</p>`;
+    const from = cityById(H.currentCityId(pet)) ?? homeCity;
+    return `${name}<p>${city.tagline}</p>
+      <p class="map-distance">${current ? 'Я здесь' : window.HVRouteMap.tripDistance(from, city)}</p>
+      ${check.ok ? button(`Отправить в ${accusative(city.name)}`, 'send-to-city', '', 'primary') : ''}`;
+  }
+
+  function cityChoiceView() {
+    const { markers, width, height, background } = window.HVRouteMap.choiceMap(mapCities, overviewMap);
+    const suggested = nextCity()?.id;
+    const from = H.currentCityId(pet);
+    const at = (x, y) => `left:${100 * x / width}%;top:${100 * y / height}%`;
+    return `<header class="city-map-heading">
+        ${title('Куда поедем?')}<p>${mapLine}</p>
+      </header>
+      <div class="city-map-views" role="group" aria-label="Область карты">
+        ${button('Центр России', 'map-region', `data-value="central" aria-pressed="${!overviewMap}"`)}
+        ${button('Вся Россия', 'map-region', `data-value="overview" aria-pressed="${overviewMap}"`)}
+      </div>
+      <div class="city-map-canvas route-map-frame"><div class="city-map-stage" role="group" aria-label="Города на карте">
+        ${background}
+        ${markers.map(({ city, point, label }) => {
+          const home = city.id === homeCity.id;
+          const region = home && overviewMap;
+          const current = !home && city.id === from;
+          const visited = pet.visited.includes(city.id);
+          const closed = city.проверено === false;
+          const action = region ? 'map-region' : 'select-city';
+          const value = region ? 'central' : city.id;
+          const name = region ? 'Центр России' : city.name;
+          const status = [current ? 'Я здесь' : '', closed ? 'скоро' : ''].filter(Boolean).join(' · ');
+          const labelText = [name, status, visited ? 'посещён' : '', home && !region ? 'дом питомца' : ''].filter(Boolean).join(', ');
+          const active = selectedCityId === city.id;
+          const kind = home ? 'home' : closed ? 'closed' : 'open';
+          const hint = !selectedCityId && suggested === city.id ? ' data-suggested' : '';
+          return `<button class="city-point" type="button" style="${at(point.x, point.y)}"
+              data-action="${action}" data-value="${value}" data-kind="${kind}"${hint} tabindex="-1" aria-hidden="true">
+              ${home ? '<svg viewBox="0 0 12 12" aria-hidden="true"><path class="map-house" d="M1.3 5.8 6 1.8l4.7 4 M2.8 5v5.2h6.4V5 M6 10.2V7.8"/></svg>' : '<span></span>'}
+            </button>
+            <button class="city-label" type="button" style="${at(...(label ?? [point.x, point.y]))}"
+              data-action="${action}" data-value="${value}" data-kind="${kind}"
+              ${region ? '' : `aria-pressed="${active}"`} aria-label="${labelText}">
+              ${name}${visited ? ' <span class="city-stamp" aria-hidden="true">✓</span>' : ''}
+              ${status ? `<small>${status}</small>` : ''}
+            </button>`;
+        }).join('')}
+      </div></div>
+      <p class="route-credit city-map-credit">Natural Earth · © участники OpenStreetMap</p>
+      <section class="city-card glass" id="city-card" aria-live="polite">${cityChoiceCard()}</section>`;
+  }
+
+  function updateCityCard() {
+    const card = content.querySelector('#city-card');
+    card.innerHTML = cityChoiceCard();
+    for (const label of content.querySelectorAll('.city-label[data-action="select-city"]')) {
+      label.setAttribute('aria-pressed', String(label.dataset.value === selectedCityId));
+    }
+    content.querySelector('[data-suggested]')?.removeAttribute('data-suggested');
+  }
+
+  function openCityMap() {
+    selectedCityId = null;
+    overviewMap = false;
+    openSheet('city-choice');
+    voice.say(mapLine, pet.species, { child });
   }
 
   function postcardMedia(city, animal) {
@@ -641,11 +840,13 @@
   function renderSheet(view) {
     const views = {
       diary: diaryView, route: () => routeMap(cityById(pet.trip.cityId)), destinations: destinationsView,
+      'city-choice': cityChoiceView,
       postcard: () => postcardView(selectedCard()), 'guest-card': () => postcardView(guest, true),
       quiz: quizView, passport: passportView, care: careView,
       share: () => `${title('В гости')}${pet.postcards.length ? shareField() : '<p>Ссылка появится после первой поездки.</p>'}`,
     };
     sheetView = view;
+    sheet.dataset.view = view;
     content.innerHTML = views[view]();
     content.scrollTop = 0;
     const video = content.querySelector('video');
@@ -673,12 +874,15 @@
 
   function closeSheet() {
     if (!sheet.open) return;
+    if (sheetView === 'city-choice') voice.stop();
     sheet.close();
     sheetView = null;
+    delete sheet.dataset.view;
     content.replaceChildren();
-    const fallback = controls.querySelector('.diary-handle') ?? controls.querySelector('h1');
+    const fallback = controls.querySelector('[data-action="open-city-map"], .diary-handle') ?? controls.querySelector('h1');
     (sheetReturnFocus?.isConnected && !sheetReturnFocus.closest('[hidden]') ? sheetReturnFocus : fallback)?.focus();
-    scheduleSpeech();
+    if (greetingPending) greetOnReturn();
+    else scheduleSpeech();
   }
 
   async function share(card) {
@@ -701,10 +905,11 @@
   }
 
   function completeCare(target) {
-    const now = new Date();
-    const result = H.doTask(pet, target.dataset.value, localDay(now));
+    const result = H.doTask(pet, target.dataset.value, localDay());
     if (!result.changed) return;
-    startTrip(nextCity(), result.pet, renderedScene.city, now);
+    savePet(result.pet);
+    render(true);
+    petAnimation.react(art);
   }
 
   const actions = {
@@ -720,8 +925,24 @@
       render(true);
     },
     'cancel-choice': () => { choosing = false; render(true); },
-    intro: () => startTrip(nextCity()),
-    depart: () => startTrip(nextCity()),
+    'advance-intro': advanceIntro,
+    'finish-intro': finishIntro,
+    'open-city-map': () => { if (canChooseCity()) openCityMap(); },
+    'map-region': (target) => {
+      const overview = target.dataset.value === 'overview';
+      if (sheetView !== 'city-choice' || overview === overviewMap) return;
+      overviewMap = overview;
+      selectedCityId = null;
+      renderSheet('city-choice');
+      content.querySelector(`.city-map-views [data-value="${target.dataset.value}"]`)?.focus({ preventScroll: true });
+    },
+    'select-city': (target) => {
+      if (sheetView !== 'city-choice') return;
+      selectedCityId = target.dataset.value;
+      updateCityCard();
+      if (target.matches('.city-point')) content.querySelector(`.city-label[data-value="${selectedCityId}"]`)?.focus({ preventScroll: true });
+    },
+    'send-to-city': () => { if (sheetView === 'city-choice') startTrip(selectedCityId); },
     'answer-call': () => {
       savePet({ ...pet, arrival: { ...pet.arrival, answered: true } });
       render(true);
@@ -769,9 +990,8 @@
     reset: () => {
       if (!window.confirm('Сбросить питомца, дела, поездки и открытки?')) return;
       clearTimeout(returnTimer);
-      clearTimeout(journeyTimer);
       savePet(null);
-      cheeringAt = null;
+      introIndex = 0;
       selectedSpecies = 'cat';
       draftName = species.cat[1];
       choosing = false;
@@ -782,7 +1002,8 @@
   function setMenu(open) {
     menuOpen = open;
     renderMenu();
-    scheduleSpeech();
+    if (!open && greetingPending) greetOnReturn();
+    else scheduleSpeech();
   }
 
   menuButton.addEventListener('click', () => setMenu(!menuOpen));
@@ -848,14 +1069,6 @@
     render(true);
   });
 
-  content.addEventListener('submit', (event) => {
-    if (event.target.id !== 'destination-form') return;
-    event.preventDefault();
-    savePet({ ...pet, nextStopId: event.target.elements.city.value });
-    closeSheet();
-    render(true);
-  });
-
   const gestureDirection = { choose: 'side', care: 'up', diary: 'up', sheet: 'down' };
   let drag;
   let swipeButton;
@@ -891,15 +1104,22 @@
 
   if (!guestMode) restore();
   reducedMotion.addEventListener('change', () => {
-    const line = lines[lineIndex];
-    if (line && reducedMotion.matches) speak(line, false);
+    if (reducedMotion.matches) {
+      clearInterval(typingTimer);
+      const live = controls.querySelector('#subtitle-live');
+      if (live) controls.querySelector('#subtitle-text').textContent = live.textContent;
+    }
     updateRoute();
   });
-  window.addEventListener('focus', refreshClock);
+  window.addEventListener('blur', () => { wasAway = true; });
+  window.addEventListener('focus', onReturn);
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) refreshClock();
-    scheduleSpeech();
+    if (document.hidden) {
+      wasAway = true;
+      clearTimeout(speechTimer);
+      voice.stop();
+    } else onReturn();
   });
   setInterval(refreshClock, 15000);
-  if (!checkReturn()) render();
+  if (!checkReturn()) render(false, Boolean(pet));
 })();

@@ -2,7 +2,8 @@
   'use strict';
 
   const TRIP_HOURS = 8;
-  const INTRO_TRIP_SECONDS = 6;
+  const INTRO_TRIP_SECONDS = 60;
+  const HOME_CITY_ID = 'moscow';
   const HOUR = 60 * 60 * 1000;
 
   const TASKS = [
@@ -28,6 +29,7 @@
       name,
       species,
       color: (opts && opts.color) || 'ginger',
+      introSeen: false,
       introDone: false,
       care: null,
       trip: null,
@@ -39,6 +41,7 @@
 
   function normalizePet(pet) {
     return Object.assign({}, pet, {
+      introSeen: pet.introSeen !== false,
       introDone: Boolean(pet.introDone || pet.postcards?.length || pet.visited?.length),
       care: pet.care && typeof pet.care === 'object' ? pet.care : null,
       trip: pet.trip || null,
@@ -46,6 +49,10 @@
       visited: Array.isArray(pet.visited) ? pet.visited : [],
       wish: Array.isArray(pet.wish) ? pet.wish : [],
     });
+  }
+
+  function seeIntro(pet) {
+    return pet.introSeen ? pet : { ...pet, introSeen: true };
   }
 
   function careForDay(pet, dayKey) {
@@ -96,10 +103,17 @@
     return !pet.introDone && pet.postcards.length === 0 && pet.visited.length === 0;
   }
 
+  function currentCityId(pet) {
+    return pet.postcards[0]?.cityId ?? HOME_CITY_ID;
+  }
+
   function canStartTrip(pet, cityId, cities, dayKey) {
     if (pet.trip) return { ok: false, reason: 'Питомец уже в пути' };
+    if (!cityId) return { ok: false, reason: 'Выбери город на карте' };
+    if (cityId === currentCityId(pet)) return { ok: false, reason: 'Питомец уже здесь' };
     const city = findCity(cities, cityId);
     if (!city) return { ok: false, reason: 'Такого города нет' };
+    if (city.проверено === false) return { ok: false, reason: 'Этот город ещё готовим' };
     if (isIntro(pet)) return { ok: true, reason: '', kind: 'intro' };
     const care = careForDay(pet, dayKey);
     if (!care?.done) return { ok: false, reason: 'Сначала сделай одно дело для себя' };
@@ -115,6 +129,7 @@
       care: intro ? pet.care : Object.assign({}, pet.care, { tripUsed: true }),
       trip: {
         cityId,
+        fromCityId: currentCityId(pet),
         startedAt: now,
         returnAt: now + (intro ? INTRO_TRIP_SECONDS * 1000 : TRIP_HOURS * HOUR),
         kind: check.kind,
@@ -204,8 +219,8 @@
   }
 
   const api = {
-    TRIP_HOURS, INTRO_TRIP_SECONDS, TASKS, FOCUS, SPECIES,
-    newPet, normalizePet, careForDay, chooseCare, doTask, canStartTrip, startTrip, finishTrip,
+    TRIP_HOURS, INTRO_TRIP_SECONDS, HOME_CITY_ID, TASKS, FOCUS, SPECIES,
+    newPet, normalizePet, seeIntro, currentCityId, careForDay, chooseCare, doTask, canStartTrip, startTrip, finishTrip,
     answerQuiz, toggleWish, passport, encodeGuest, decodeGuest, findCity,
   };
 
